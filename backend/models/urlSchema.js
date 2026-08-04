@@ -18,15 +18,13 @@ const urlSchema = new mongoose.Schema({
         type: Date,
         default: Date.now,
     },
-    visitHistory: [
-        {
-            timestamp: {
-                type: Date,
-                default: Date.now,
-            },
-        },
-    ],
+    clickCount: {
+        type: Number,
+        default: 0,
+    },
 })
+
+urlSchema.index({ userId: 1, createdAt: -1 })
 
 const Url = mongoose.model('Url', urlSchema)
 

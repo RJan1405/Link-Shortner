@@ -3,10 +3,11 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'
+const SHORT_BASE = new URL(API_BASE).origin
 const API_ROUTES = {
     shorten: '/api/shorten',
     urls: '/api/urls',
-    redirect: (shortId) => `/api/${shortId}`,
+    redirect: (shortId) => `/${shortId}`,
     delete: (shortId) => `/api/urls/${shortId}`,
     stats: (shortId) => `/api/stats/${shortId}`,
 }
@@ -19,6 +20,9 @@ function Home() {
     const [saving, setSaving] = useState(false)
     const [error, setError] = useState('')
     const [deleting, setDeleting] = useState(null)
+    const [currentPage, setCurrentPage] = useState(1)
+    const [totalPages, setTotalPages] = useState(1)
+    const pageSize = 10
     const navigate = useNavigate()
 
     const shortUrl = useMemo(() => {
@@ -26,22 +30,28 @@ function Home() {
             return ''
         }
 
-        return `${API_BASE}${API_ROUTES.redirect(shortId)}`
+        return `${SHORT_BASE}${API_ROUTES.redirect(shortId)}`
     }, [shortId])
 
-    async function loadUrls() {
+    async function loadUrls(page = currentPage) {
         setLoading(true)
         setError('')
 
         try {
             const token = localStorage.getItem('token')
             const response = await axios.get(`${API_BASE}${API_ROUTES.urls}`, {
+                params: {
+                    page,
+                    limit: pageSize,
+                },
                 headers: {
                     Authorization: `Bearer ${token}`,
                 },
             })
             const data = response.data
             setUrls(data.urls || [])
+            setCurrentPage(data.page || page)
+            setTotalPages(data.totalPages || 1)
         } catch (requestError) {
             if (requestError.response?.status === 401) {
                 // Token expired, redirect to login
@@ -57,7 +67,7 @@ function Home() {
     }
 
     useEffect(() => {
-        loadUrls()
+        loadUrls(1)
     }, [])
 
     async function handleSubmit(event) {
@@ -76,7 +86,7 @@ function Home() {
 
             setShortId(data.shortId)
             setUrl('')
-            await loadUrls()
+            await loadUrls(1)
         } catch (requestError) {
             if (requestError.response?.status === 401) {
                 localStorage.removeItem('token')
@@ -104,7 +114,7 @@ function Home() {
                 },
             })
 
-            await loadUrls()
+            await loadUrls(currentPage)
         } catch (requestError) {
             if (requestError.response?.status === 401) {
                 localStorage.removeItem('token')
@@ -161,9 +171,33 @@ function Home() {
             <section className="panel list-panel">
                 <div className="panel-header">
                     <h2>Your Shortened URLs</h2>
-                    <button type="button" className="secondary" onClick={loadUrls} disabled={loading}>
+                    <button type="button" className="secondary" onClick={() => loadUrls(currentPage)} disabled={loading}>
                         {loading ? 'Loading...' : 'Refresh'}
                     </button>
+                </div>
+
+                <div className="panel-header" style={{ marginTop: '-0.5rem' }}>
+                    <span>
+                        Page {currentPage} of {totalPages}
+                    </span>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button
+                            type="button"
+                            className="secondary"
+                            onClick={() => loadUrls(currentPage - 1)}
+                            disabled={loading || currentPage <= 1}
+                        >
+                            Previous
+                        </button>
+                        <button
+                            type="button"
+                            className="secondary"
+                            onClick={() => loadUrls(currentPage + 1)}
+                            disabled={loading || currentPage >= totalPages}
+                        >
+                            Next
+                        </button>
+                    </div>
                 </div>
 
                 <div className="list">
@@ -171,7 +205,7 @@ function Home() {
                         <p className="empty">No URLs saved yet. Create one above!</p>
                     ) : (
                         urls.map((item) => {
-                            const itemShortUrl = `${API_BASE}${API_ROUTES.redirect(item.shortId)}`
+                            const itemShortUrl = `${SHORT_BASE}${API_ROUTES.redirect(item.shortId)}`
 
                             return (
                                 <article className="list-item" key={item.shortId}>

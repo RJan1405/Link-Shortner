@@ -31,15 +31,20 @@ async function handelClick(req, res) {
 
         const urlData = await Url.findOneAndUpdate(
             { shortId },
-            {
-                $push: {
-                    visitHistory: {
-                        timestamp: new Date(),
+            [
+                {
+                    $set: {
+                        clickCount: {
+                            $add: [
+                                { $ifNull: ['$clickCount', { $size: { $ifNull: ['$visitHistory', []] } }] },
+                                1,
+                            ],
+                        },
                     },
                 },
-            },
-            { new: true }
-        )
+            ],
+            { new: true, projection: { originalUrl: 1 } }
+        ).lean()
 
         if (!urlData) {
             return res.status(404).json({ error: 'URL not found' })
@@ -60,14 +65,28 @@ async function getAllUrls(req, res) {
             return res.status(401).json({ error: 'Authentication required' })
         }
 
-        const urls = await Url.find({ userId })
+        const page = Math.max(parseInt(req.query.page, 10) || 1, 1)
+        const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 10, 1), 50)
+        const filter = { userId }
+        const totalCount = await Url.countDocuments(filter)
+        const totalPages = Math.max(Math.ceil(totalCount / limit), 1)
+        const currentPage = Math.min(page, totalPages)
+        const skip = (currentPage - 1) * limit
+
+        const urls = await Url.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean()
+
         const urlsWithClicks = urls.map((url) => ({
-            ...url.toObject(),
-            totalClicks: url.visitHistory?.length || 0,
-            visited: url.visitHistory || [],
+            ...url,
+            totalClicks: url.clickCount ?? url.visitHistory?.length ?? 0,
         }))
 
-        return res.json({ urls: urlsWithClicks })
+        return res.json({
+            urls: urlsWithClicks,
+            page: currentPage,
+            limit,
+            totalCount,
+            totalPages,
+        })
     } catch (error) {
         console.error('Error fetching URLs:', error)
         res.status(500).json({ error: 'Internal server error' })
@@ -84,7 +103,7 @@ async function deleteUrl(req, res) {
         }
 
         // Find URL and verify it belongs to the current user
-        const url = await Url.findOne({ shortId, userId })
+        const url = await Url.findOne({ shortId, userId }).lean()
         if (!url) {
             return res.status(404).json({ error: 'URL not found or unauthorized' })
         }
@@ -108,7 +127,7 @@ async function getUrlStats(req, res) {
         }
 
         // Find URL and verify it belongs to the current user
-        const url = await Url.findOne({ shortId, userId })
+        const url = await Url.findOne({ shortId, userId }).lean()
         if (!url) {
             return res.status(404).json({ error: 'URL not found or unauthorized' })
         }
@@ -117,8 +136,7 @@ async function getUrlStats(req, res) {
             shortId: url.shortId,
             originalUrl: url.originalUrl,
             createdAt: url.createdAt,
-            totalClicks: url.visitHistory?.length || 0,
-            visitHistory: url.visitHistory || [],
+            totalClicks: url.clickCount ?? url.visitHistory?.length ?? 0,
         })
     } catch (error) {
         console.error('Error fetching URL stats:', error)
