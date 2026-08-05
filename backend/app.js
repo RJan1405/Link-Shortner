@@ -10,6 +10,10 @@ app.use(cors())
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
 
+app.get('/', (req, res) => {
+    res.send('URL Shortener API is running')
+})
+
 app.get('/:shortId', handelClick)
 
 app.use('/api', routes)
