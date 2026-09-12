@@ -31,18 +31,7 @@ async function handelClick(req, res) {
 
         const urlData = await Url.findOneAndUpdate(
             { shortId },
-            [
-                {
-                    $set: {
-                        clickCount: {
-                            $add: [
-                                { $ifNull: ['$clickCount', { $size: { $ifNull: ['$visitHistory', []] } }] },
-                                1,
-                            ],
-                        },
-                    },
-                },
-            ],
+            { $inc: { clickCount: 1 } },
             { new: true, projection: { originalUrl: 1 } }
         ).lean()
 
